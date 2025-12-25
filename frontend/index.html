@@ -1,0 +1,279 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Qwen2-VL 美学对比</title>
+    <style>
+      :root { --bg:#0b1020; --card:#111a33; --text:#e7ecff; --muted:#a8b3d6; --accent:#6ea8fe; --err:#ff6b6b; }
+      body { margin:0; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial; background:linear-gradient(180deg,#070a14,#0b1020); color:var(--text); }
+      .wrap { max-width: 1100px; margin: 0 auto; padding: 28px 16px 60px; }
+      h1 { font-size: 22px; margin: 0 0 12px; }
+      p { margin: 0 0 18px; color: var(--muted); }
+      .row { display:flex; gap:16px; flex-wrap:wrap; }
+      .card { background: rgba(17,26,51,.9); border:1px solid rgba(255,255,255,.08); border-radius: 14px; padding: 14px; box-shadow: 0 10px 30px rgba(0,0,0,.35); }
+      .card h2 { font-size: 14px; margin: 0 0 10px; color: var(--muted); font-weight: 600; }
+      .uploader { flex: 1 1 320px; }
+      .result { flex: 1 1 680px; }
+      .drop {
+        border: 1px dashed rgba(255,255,255,.25);
+        border-radius: 12px;
+        padding: 12px;
+        display:flex;
+        gap:12px;
+        align-items:center;
+      }
+      .drop input { width: 100%; }
+      .preview { width: 120px; height: 120px; border-radius: 10px; background: rgba(255,255,255,.06); display:flex; align-items:center; justify-content:center; overflow:hidden; }
+      .preview img { width:100%; height:100%; object-fit:cover; }
+      .btns { display:flex; gap:10px; margin-top: 12px; flex-wrap:wrap; }
+      button { background: var(--accent); color: #0b1020; border: 0; border-radius: 10px; padding: 10px 12px; font-weight: 700; cursor:pointer; }
+      button.secondary { background: rgba(255,255,255,.10); color: var(--text); border:1px solid rgba(255,255,255,.14); }
+      button:disabled { opacity:.55; cursor:not-allowed; }
+      .kv { display:grid; grid-template-columns: 120px 1fr; gap:8px 12px; margin-top:10px; }
+      .k { color: var(--muted); }
+      .v { word-break: break-word; }
+      .badge { display:inline-block; padding: 3px 10px; border-radius: 999px; background: rgba(110,168,254,.18); border:1px solid rgba(110,168,254,.35); margin-left: 8px; }
+      .grid2 { display:grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+      .dist { display:grid; gap:6px; }
+      .bar { display:flex; align-items:center; gap:8px; }
+      .bar .label { width: 28px; color: var(--muted); font-variant-numeric: tabular-nums; }
+      .bar .track { flex: 1; height: 10px; border-radius: 999px; background: rgba(255,255,255,.08); overflow:hidden; }
+      .bar .fill { height: 100%; background: linear-gradient(90deg, rgba(110,168,254,.35), rgba(110,168,254,1)); }
+      .bar .pct { width: 56px; text-align:right; color: var(--muted); font-variant-numeric: tabular-nums; }
+      .error { color: var(--err); white-space: pre-wrap; margin-top: 10px; }
+      textarea { width: 100%; min-height: 140px; background: rgba(0,0,0,.20); color: var(--text); border:1px solid rgba(255,255,255,.12); border-radius: 10px; padding: 10px; resize: vertical; }
+      .topline { display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; }
+      .small { font-size: 12px; color: var(--muted); }
+      code { color: #c7d2fe; }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <div class="topline">
+        <div>
+          <h1>Qwen2-VL 美学对比（两图上传）</h1>
+          <p>上传两张图片，后端使用 DPO 后模型对两图进行美学比较，返回优劣、评分、概率分布和简短理由。</p>
+        </div>
+        <div class="small">API Base: <code id="apiBase"></code></div>
+      </div>
+
+      <div class="row">
+        <div class="card uploader">
+          <h2>上传图片</h2>
+
+          <div class="drop">
+            <div class="preview" id="prevA">A</div>
+            <div style="flex:1">
+              <div class="small">Image A</div>
+              <input type="file" id="fileA" accept="image/*" />
+            </div>
+          </div>
+
+          <div style="height:10px"></div>
+
+          <div class="drop">
+            <div class="preview" id="prevB">B</div>
+            <div style="flex:1">
+              <div class="small">Image B</div>
+              <input type="file" id="fileB" accept="image/*" />
+            </div>
+          </div>
+
+          <div class="btns">
+            <button id="btnCompare">开始对比</button>
+            <button class="secondary" id="btnStatus">刷新状态</button>
+            <button class="secondary" id="btnClear">清空</button>
+          </div>
+
+          <div class="kv" style="margin-top:14px">
+            <div class="k">服务状态</div>
+            <div class="v" id="statusText">-</div>
+          </div>
+
+          <div class="error" id="err"></div>
+        </div>
+
+        <div class="card result">
+          <h2>结果</h2>
+          <div class="kv">
+            <div class="k">Winner</div>
+            <div class="v" id="winner">-</div>
+            <div class="k">Score A</div>
+            <div class="v" id="scoreA">-</div>
+            <div class="k">Score B</div>
+            <div class="v" id="scoreB">-</div>
+            <div class="k">Score Diff</div>
+            <div class="v" id="scoreDiff">-</div>
+          </div>
+
+          <div style="height:14px"></div>
+
+          <div class="grid2">
+            <div>
+              <div class="small" style="margin-bottom:8px">Distribution A</div>
+              <div class="dist" id="distA"></div>
+            </div>
+            <div>
+              <div class="small" style="margin-bottom:8px">Distribution B</div>
+              <div class="dist" id="distB"></div>
+            </div>
+          </div>
+
+          <div style="height:14px"></div>
+
+          <div class="small" style="margin-bottom:8px">Reasoning（简短理由）</div>
+          <textarea id="reasoning" readonly placeholder="-"> </textarea>
+
+          <div style="height:10px"></div>
+          <div class="small">Logic（结构化信息）</div>
+          <pre id="logic" class="small" style="background: rgba(0,0,0,.2); padding: 10px; border-radius: 10px; border:1px solid rgba(255,255,255,.12); overflow:auto;">-</pre>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      // 可通过 ?api=http://localhost:6006 覆盖
+      const qs = new URLSearchParams(location.search);
+      const API_BASE = qs.get('api') || 'http://localhost:6006';
+      document.getElementById('apiBase').textContent = API_BASE;
+
+      const el = (id) => document.getElementById(id);
+      const fileA = el('fileA');
+      const fileB = el('fileB');
+      const prevA = el('prevA');
+      const prevB = el('prevB');
+      const btnCompare = el('btnCompare');
+      const btnStatus = el('btnStatus');
+      const btnClear = el('btnClear');
+      const err = el('err');
+      const statusText = el('statusText');
+
+      const winner = el('winner');
+      const scoreA = el('scoreA');
+      const scoreB = el('scoreB');
+      const scoreDiff = el('scoreDiff');
+      const distA = el('distA');
+      const distB = el('distB');
+      const reasoning = el('reasoning');
+      const logic = el('logic');
+
+      function setError(msg) {
+        err.textContent = msg || '';
+      }
+
+      function setPreview(container, file, label) {
+        container.innerHTML = '';
+        if (!file) {
+          container.textContent = label;
+          return;
+        }
+        const img = document.createElement('img');
+        img.src = URL.createObjectURL(file);
+        container.appendChild(img);
+      }
+
+      function renderDistribution(container, dist) {
+        container.innerHTML = '';
+        if (!dist) {
+          container.textContent = '-';
+          return;
+        }
+        const keys = Object.keys(dist).map(k => Number(k)).sort((a,b)=>a-b).map(String);
+        for (const k of keys) {
+          const p = Number(dist[k] ?? 0);
+          const bar = document.createElement('div');
+          bar.className = 'bar';
+          bar.innerHTML = `
+            <div class="label">${k}</div>
+            <div class="track"><div class="fill" style="width:${Math.max(0, Math.min(1, p))*100}%"></div></div>
+            <div class="pct">${(p*100).toFixed(1)}%</div>
+          `;
+          container.appendChild(bar);
+        }
+      }
+
+      async function fetchJSON(path, opts) {
+        const res = await fetch(API_BASE + path, opts);
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || data.status === 'error') {
+          const msg = data?.error?.message || data?.detail || res.statusText;
+          throw new Error(msg);
+        }
+        return data;
+      }
+
+      async function refreshStatus() {
+        setError('');
+        try {
+          const s = await fetchJSON('/status');
+          const d = s.data;
+          statusText.textContent = d.model_ready ? `就绪 (device=${d.device || '-'}, dtype=${d.dtype || '-'})` : `未就绪: ${d.model_load_error || 'loading...'}`;
+        } catch (e) {
+          statusText.textContent = '无法连接后端';
+          setError(String(e?.message || e));
+        }
+      }
+
+      async function compare() {
+        setError('');
+        if (!fileA.files[0] || !fileB.files[0]) {
+          setError('请同时选择 Image A 和 Image B。');
+          return;
+        }
+
+        btnCompare.disabled = true;
+        btnCompare.textContent = '对比中...';
+        try {
+          const fd = new FormData();
+          fd.append('image_a', fileA.files[0]);
+          fd.append('image_b', fileB.files[0]);
+
+          const res = await fetchJSON('/compare', { method: 'POST', body: fd });
+          const d = res.data;
+
+          if (d.winner === 'A') winner.innerHTML = `A <span class="badge">更优</span>`;
+          else if (d.winner === 'B') winner.innerHTML = `B <span class="badge">更优</span>`;
+          else winner.innerHTML = `tie <span class="badge">接近</span>`;
+
+          scoreA.textContent = d.score_a;
+          scoreB.textContent = d.score_b;
+          scoreDiff.textContent = d.score_diff;
+
+          renderDistribution(distA, d.distribution_a);
+          renderDistribution(distB, d.distribution_b);
+
+          reasoning.value = d.reasoning || '';
+          logic.textContent = JSON.stringify(d.logic || {}, null, 2);
+        } catch (e) {
+          setError(String(e?.message || e));
+        } finally {
+          btnCompare.disabled = false;
+          btnCompare.textContent = '开始对比';
+        }
+      }
+
+      fileA.addEventListener('change', () => setPreview(prevA, fileA.files[0], 'A'));
+      fileB.addEventListener('change', () => setPreview(prevB, fileB.files[0], 'B'));
+      btnCompare.addEventListener('click', compare);
+      btnStatus.addEventListener('click', refreshStatus);
+      btnClear.addEventListener('click', () => {
+        fileA.value = '';
+        fileB.value = '';
+        setPreview(prevA, null, 'A');
+        setPreview(prevB, null, 'B');
+        winner.textContent = '-';
+        scoreA.textContent = '-';
+        scoreB.textContent = '-';
+        scoreDiff.textContent = '-';
+        distA.innerHTML = '';
+        distB.innerHTML = '';
+        reasoning.value = '';
+        logic.textContent = '-';
+        setError('');
+      });
+
+      refreshStatus();
+    </script>
+  </body>
+</html>

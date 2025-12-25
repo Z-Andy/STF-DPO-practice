@@ -22,7 +22,6 @@
 
 ### 2.1 Q-Align 基线
 - 使用 `q-future/one-align` 的官方 `model.score(..., task_="aesthetics")` 接口对图片打分。
-- 在 AADB 未见数据集上得到基线 SRCC（报告中记录为 0.6557）。
 
 ### 2.2 Qwen2-VL 10 档概率加权打分（Q-Align 风格）
 本项目在 Qwen2-VL 上复刻 Q-Align 的“档位概率加权”做法：
